@@ -1,4 +1,4 @@
-# Artisyn.io
+# Artisyn.io Smart Contracts
 
 ## Find Artisans Near You
 
