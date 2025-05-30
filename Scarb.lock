@@ -6,6 +6,7 @@ name = "artisyn"
 version = "0.1.0"
 dependencies = [
  "openzeppelin",
+ "snforge_std",
 ]
 
 [[package]]
@@ -126,3 +127,16 @@ name = "openzeppelin_utils"
 version = "1.0.0"
 source = "registry+https://scarbs.xyz/"
 checksum = "sha256:fd348b31c4a4407add33adc3c2b8f26dca71dbd7431faaf726168f37a91db0c1"
+
+[[package]]
+name = "snforge_scarb_plugin"
+version = "0.44.0"
+source = "git+https://github.com/foundry-rs/starknet-foundry?tag=v0.44.0#437d128b4f54847666ea8021530d237f6bf47866"
+
+[[package]]
+name = "snforge_std"
+version = "0.44.0"
+source = "git+https://github.com/foundry-rs/starknet-foundry?tag=v0.44.0#437d128b4f54847666ea8021530d237f6bf47866"
+dependencies = [
+ "snforge_scarb_plugin",
+]
