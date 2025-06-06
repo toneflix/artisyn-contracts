@@ -21,14 +21,14 @@ pub trait IArtisynToken<TContractState> {
 
 #[starknet::contract]
 pub mod ArtisynToken {
-    use starknet::{ClassHash, get_caller_address, ContractAddress};
     use core::starknet::storage::{
-        StoragePointerReadAccess, StoragePointerWriteAccess, Map, StoragePathEntry,
+        Map, StoragePathEntry, StoragePointerReadAccess, StoragePointerWriteAccess,
     };
-    use openzeppelin::{
-        access::ownable::OwnableComponent, token::erc20::{ERC20Component, ERC20HooksEmptyImpl},
-        introspection::src5::SRC5Component, upgrades::UpgradeableComponent,
-    };
+    use openzeppelin::access::ownable::OwnableComponent;
+    use openzeppelin::introspection::src5::SRC5Component;
+    use openzeppelin::token::erc20::{ERC20Component, ERC20HooksEmptyImpl};
+    use openzeppelin::upgrades::UpgradeableComponent;
+    use starknet::{ClassHash, ContractAddress, get_caller_address};
 
     component!(path: OwnableComponent, storage: ownable, event: OwnableEvent);
     component!(path: ERC20Component, storage: erc20, event: ERC20Event);

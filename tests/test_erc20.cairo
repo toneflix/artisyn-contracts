@@ -1,17 +1,16 @@
 #[cfg(test)]
 mod tests {
-    use core::result::ResultTrait;
-    use starknet::{ContractAddress, get_contract_address};
-    use snforge_std::{
-        declare, ContractClassTrait, DeclareResultTrait, start_cheat_caller_address,
-        stop_cheat_caller_address, spy_events, EventSpyAssertionsTrait,
-    };
-
-    use artisyn::contracts::erc20::{IArtisynTokenDispatcher, IArtisynTokenDispatcherTrait};
     use artisyn::contracts::erc20::ArtisynToken::{
-        Event as TokenEvent, MinterAdded, TokensMinted, ContractPaused,
+        ContractPaused, Event as TokenEvent, MinterAdded, TokensMinted,
     };
+    use artisyn::contracts::erc20::{IArtisynTokenDispatcher, IArtisynTokenDispatcherTrait};
+    use core::result::ResultTrait;
     use openzeppelin::token::erc20::interface::{IERC20Dispatcher, IERC20DispatcherTrait};
+    use snforge_std::{
+        ContractClassTrait, DeclareResultTrait, EventSpyAssertionsTrait, declare, spy_events,
+        start_cheat_caller_address, stop_cheat_caller_address,
+    };
+    use starknet::{ContractAddress, get_contract_address};
 
     const INITIAL_SUPPLY: u256 = 1000000_000000000000000000; // 1M tokens with 18 decimals
     const MINT_AMOUNT: u256 = 1000_000000000000000000; // 1K tokens

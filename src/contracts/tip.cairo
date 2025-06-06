@@ -1,15 +1,16 @@
 #[starknet::contract]
 pub mod TipManager {
-    use starknet::{ContractAddress, get_caller_address, get_block_timestamp, get_contract_address};
-    use starknet::storage::{
-        Map, StoragePointerReadAccess, StoragePointerWriteAccess, StoragePathEntry, StoragePath,
-        Mutable, MutableVecTrait,
-    };
-    use crate::interfaces::tip::{
-        Tip, TipNode, TipDetails, ITipManager, TipStatus, TipCreated, TipResolved,
-    };
-    use openzeppelin::token::erc20::interface::{IERC20Dispatcher, IERC20DispatcherTrait};
     use core::num::traits::Zero;
+    use openzeppelin::token::erc20::interface::{IERC20Dispatcher, IERC20DispatcherTrait};
+    use starknet::storage::{
+        Map, Mutable, MutableVecTrait, StoragePath, StoragePathEntry, StoragePointerReadAccess,
+        StoragePointerWriteAccess,
+    };
+    use starknet::{ContractAddress, get_block_timestamp, get_caller_address, get_contract_address};
+    use crate::interfaces::tip::{
+        ITipManager, Tip, TipCreated, TipDetails, TipNode, TipResolved, TipStatus, TipUpdate,
+        TipUpdated,
+    };
 
     #[storage]
     pub struct Storage {
@@ -27,6 +28,7 @@ pub mod TipManager {
     pub enum Event {
         TipCreated: TipCreated,
         TipResolved: TipResolved,
+        TipUpdated: TipUpdated,
     }
 
     #[constructor]
@@ -55,12 +57,50 @@ pub mod TipManager {
             self.create_tip(tip, 0)
         }
 
-        fn update(ref self: ContractState, id: u256) {
+        fn update(ref self: ContractState, id: u256, update: TipUpdate) {
             let node = self.tips.entry(id);
+            // do some security checks to assert that this
+            let caller = get_caller_address();
+            assert!(caller == node.creator.read(), "UNAUTHORIZED CALLER");
+            assert!(node.status.read() == TipStatus::Pending, "INVALID TIP");
             if self.update_state(node) {
                 return;
             }
-            // implement an update here.
+            // implement an update here. Rebuild the tip, if any.
+            // move all old values for a possible event if entry values are validated successfully
+            let mut tip = node.tip.read();
+            let mut old_recipient = tip.recipient;
+            let mut old_target_amount = tip.target_amount;
+            let mut old_deadline = tip.deadline;
+            let mut old_token = tip.token;
+            let timestamp = get_block_timestamp();
+            if let Option::Some(recipient) = update.recipient {
+                tip.recipient = recipient;
+            }
+            if let Option::Some(target_amount) = update.target_amount {
+                let funds_raised = node.funds_raised.read();
+                assert!(target_amount > funds_raised, "AMOUNT {} <= FUNDS RAISED: {}", target_amount, funds_raised);
+                tip.target_amount = target_amount;
+            }
+            if let Option::Some(deadline) = update.deadline {
+                tip.deadline = deadline;
+            }
+            if let Option::Some(token) = update.token {
+                tip.token = token;
+            }
+
+            self.validate_tip(tip, caller, timestamp);
+            node.tip.write(tip);
+
+            let tip_updated = TipUpdated {
+                updated_by: caller,
+                updated_at: timestamp,
+                recipient: (old_recipient, tip.recipient),
+                target_amount: (old_target_amount, tip.target_amount),
+                deadline: (old_deadline, tip.deadline),
+                token: (old_token, tip.token)
+            };
+            self.emit(tip_updated);
         }
 
         fn create_and_fund(ref self: ContractState, tip: Tip, initial_funding: u256) -> u256 {
@@ -88,15 +128,7 @@ pub mod TipManager {
             let created_at = get_block_timestamp();
             let id = self.tip_count.read() + 1;
             assert!(caller.is_non_zero(), "ZERO CALLER");
-            assert!(target_amount >= self.min_target_amount.read(), "INVALID TARGET AMOUNT");
-            let max = self.max_target_amount.read();
-            if max > 0 {
-                assert!(target_amount <= max, "Tip is > max tip amount of: {}", max);
-            }
-            assert!(recipient.is_non_zero(), "RECIPIENT IS ZERO");
-            assert!(caller != recipient, "CALLER CANNOT BE RECIPIENT");
-            assert!(deadline > created_at, "INVALID DEADLINE");
-            assert!(self.supported_tokens.entry(token).read(), "REQUESTED TOKEN IS NOT SUPPORTED");
+            self.validate_tip(tip, caller, created_at);
 
             let node = self.tips.entry(id);
 
@@ -105,7 +137,7 @@ pub mod TipManager {
                 self.fund_tip(node, amount, tip, dispatcher, caller);
             }
             node.id.write(id);
-            node.sender.write(caller);
+            node.creator.write(caller);
             node.tip.write(tip);
             node.created_at.write(created_at);
             node.status.write(TipStatus::Pending);
@@ -154,7 +186,7 @@ pub mod TipManager {
                         node.funders.entry(funder).write(0);
                         node.funds_raised.write(node.funds_raised.read() - funds);
                         resolved_to.append(funder);
-                    };
+                    }
                     node.status.write(TipStatus::Void);
                     status = 'VOID';
                 }
@@ -191,10 +223,27 @@ pub mod TipManager {
                 // offset and deduct only the necessary amount
                 amount = tip.target_amount;
             }
+            let previous = node.funds_raised.read();
             dispatcher.transfer_from(from, get_contract_address(), amount);
-            node.funds_raised.write(amount);
-            node.funds_raised_ref.write(amount);
-            node.funders.entry(caller);
+            node.funds_raised.write(previous + amount);
+            node.funds_raised_ref.write(previous + amount);
+            let previous = node.funders.entry(from).read();
+            node.funders.entry(from).write(previous + amount);
+        }
+
+        fn validate_tip(
+            ref self: ContractState, tip: Tip, caller: ContractAddress, timestamp: u64,
+        ) {
+            let Tip { recipient, target_amount, deadline, token } = tip;
+            assert!(target_amount >= self.min_target_amount.read(), "INVALID TARGET AMOUNT");
+            let max = self.max_target_amount.read();
+            if max > 0 {
+                assert!(target_amount <= max, "Tip is > max tip amount of: {}", max);
+            }
+            assert!(recipient.is_non_zero(), "RECIPIENT IS ZERO");
+            assert!(caller != recipient, "CALLER CANNOT BE RECIPIENT");
+            assert!(deadline > timestamp, "INVALID DEADLINE");
+            assert!(self.supported_tokens.entry(token).read(), "REQUESTED TOKEN IS NOT SUPPORTED");
         }
     }
 }

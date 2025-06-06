@@ -1,13 +1,13 @@
 #[starknet::component]
 pub mod FeeManagerComponent {
-    use starknet::{ContractAddress, get_caller_address, get_block_timestamp, get_contract_address};
-    use starknet::storage::{
-        StoragePointerReadAccess, StoragePointerWriteAccess, Map, StoragePathEntry,
-    };
+    use artisyn::interfaces::IFeeManager::{FeeConfig, FeeHistory, IFeeManager};
     use openzeppelin::access::ownable::OwnableComponent;
-    use openzeppelin::access::ownable::OwnableComponent::{OwnableMixinImpl, InternalImpl};
+    use openzeppelin::access::ownable::OwnableComponent::{InternalImpl, OwnableMixinImpl};
     use openzeppelin::token::erc20::interface::{IERC20Dispatcher, IERC20DispatcherTrait};
-    use artisyn::interfaces::IFeeManager::{IFeeManager, FeeConfig, FeeHistory};
+    use starknet::storage::{
+        Map, StoragePathEntry, StoragePointerReadAccess, StoragePointerWriteAccess,
+    };
+    use starknet::{ContractAddress, get_block_timestamp, get_caller_address, get_contract_address};
 
     #[storage]
     pub struct Storage {
@@ -619,7 +619,7 @@ pub mod FeeManagerComponent {
                 }
 
                 i += 1;
-            };
+            }
 
             // Update collected balance
             self.collected_balances.entry(token).write(contract_balance - total_distributed);
