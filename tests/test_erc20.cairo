@@ -7,8 +7,8 @@ mod tests {
         stop_cheat_caller_address, spy_events, EventSpyAssertionsTrait,
     };
 
-    use artisyn::erc20::{IArtisynTokenDispatcher, IArtisynTokenDispatcherTrait};
-    use artisyn::erc20::ArtisynToken::{
+    use artisyn::contracts::erc20::{IArtisynTokenDispatcher, IArtisynTokenDispatcherTrait};
+    use artisyn::contracts::erc20::ArtisynToken::{
         Event as TokenEvent, MinterAdded, TokensMinted, ContractPaused,
     };
     use openzeppelin::token::erc20::interface::{IERC20Dispatcher, IERC20DispatcherTrait};
