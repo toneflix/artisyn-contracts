@@ -1,6 +1,6 @@
 use starknet::ContractAddress;
 use core::num::traits::Zero;
-use starknet::storage::Map;
+use starknet::storage::{Map, Vec};
 
 // Fork & Branch: Fork the repository and create a dedicated branch for this feature.
 
@@ -56,13 +56,14 @@ pub struct TipDetails {
 #[derive(Drop, Copy, Serde, Default, starknet::Store)]
 pub struct Tip {
     pub recipient: ContractAddress,
-    pub amount: u256,
+    pub target_amount: u256,
     pub deadline: u64,
     pub token: ContractAddress,
 }
 
 #[starknet::storage_node]
 pub struct TipNode {
+    pub id: u256,
     pub sender: ContractAddress,
     pub tip: Tip,
     pub created_at: u64,
@@ -70,6 +71,7 @@ pub struct TipNode {
     pub funds_raised: u256, // store the state
     pub funds_raised_ref: u256, // store for the history
     pub funders: Map<ContractAddress, u256>,
+    pub funders_vec: Vec<ContractAddress>,
 }
 
 #[derive(Drop, Copy, PartialEq, Serde, Default, starknet::Store)]
@@ -87,5 +89,17 @@ pub struct TipCreated {
     pub created_at: u64,
     pub deadline: u64,
     pub target_amount: u256,
-    pub token_address: ContractAddress,
+    pub token: ContractAddress,
+}
+
+#[derive(Drop, starknet::Event)]
+pub struct TipResolved {
+    pub id: u256,
+    pub created_by: ContractAddress, // the creator of the tip
+    pub proposed_recipient: ContractAddress, // the address who the tip was created for
+    pub resolved_to: Array<ContractAddress>, // the actual recipient of the generated funds
+    pub resolved_at: u64,
+    pub amount: u256,
+    pub token: ContractAddress,
+    pub status: felt252,
 }
