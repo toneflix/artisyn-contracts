@@ -8,8 +8,8 @@ pub mod TipManager {
     };
     use starknet::{ContractAddress, get_block_timestamp, get_caller_address, get_contract_address};
     use crate::interfaces::tip::{
-        ITipManager, Tip, TipCreated, TipDetails, TipNode, TipResolved, TipStatus, TipUpdate,
-        TipUpdated,
+        ITipManager, Tip, TipCreated, TipDetails, TipFunded, TipNode, TipResolved, TipStatus,
+        TipUpdate, TipUpdated,
     };
 
     #[storage]
@@ -26,9 +26,10 @@ pub mod TipManager {
     #[event]
     #[derive(Drop, starknet::Event)]
     pub enum Event {
-        TipCreated: TipCreated,
-        TipResolved: TipResolved,
-        TipUpdated: TipUpdated,
+        Created: TipCreated,
+        Resolved: TipResolved,
+        Updated: TipUpdated,
+        Funded: TipFunded,
     }
 
     #[constructor]
@@ -79,7 +80,12 @@ pub mod TipManager {
             }
             if let Option::Some(target_amount) = update.target_amount {
                 let funds_raised = node.funds_raised.read();
-                assert!(target_amount > funds_raised, "AMOUNT {} <= FUNDS RAISED: {}", target_amount, funds_raised);
+                assert!(
+                    target_amount > funds_raised,
+                    "AMOUNT {} <= FUNDS RAISED: {}",
+                    target_amount,
+                    funds_raised,
+                );
                 tip.target_amount = target_amount;
             }
             if let Option::Some(deadline) = update.deadline {
@@ -93,12 +99,13 @@ pub mod TipManager {
             node.tip.write(tip);
 
             let tip_updated = TipUpdated {
+                id,
                 updated_by: caller,
                 updated_at: timestamp,
                 recipient: (old_recipient, tip.recipient),
                 target_amount: (old_target_amount, tip.target_amount),
                 deadline: (old_deadline, tip.deadline),
-                token: (old_token, tip.token)
+                token: (old_token, tip.token),
             };
             self.emit(tip_updated);
         }
@@ -107,9 +114,37 @@ pub mod TipManager {
             self.create_tip(tip, initial_funding)
         }
         /// Here, anybody can fund a particular tip, except the recipient.
-        fn fund(ref self: ContractState, id: u256) {}
-        fn claim(ref self: ContractState, id: u256) {}
-        fn claim_available(ref self: ContractState) {}
+        fn fund(ref self: ContractState, id: u256, amount: u256) {
+            let caller = get_caller_address();
+            assert!(caller.is_non_zero(), "ZERO CALLER");
+            let node = self.tips.entry(id);
+            assert!(node.status.read() == TipStatus::Pending, "INVALID TIP WITH ID");
+            if self.update_state(node) {
+                return;
+            }
+
+            let tip = node.tip.read();
+            assert!(caller != tip.recipient, "CALLER CANNOT BE RECIPIENT");
+            let dispatcher = IERC20Dispatcher { contract_address: tip.token };
+            assert!(dispatcher.balance_of(caller) >= amount, "INSUFFICIENT BALANCE");
+            self.fund_tip(node, amount, tip, dispatcher, caller);
+        }
+
+        fn claim(ref self: ContractState, id: u256) {
+            let caller = get_caller_address();
+            assert!(caller.is_non_zero(), "ZERO CALLER");
+            let node = self.tips.entry(id);
+
+            assert!(
+                self.update_state(node),
+                "TIP WITH ID: {} IS EITHER NOT CLAIMABLE, INVALID, OR HAS BEEN CLAIMED.",
+                id,
+            );
+        }
+
+        fn claim_available(ref self: ContractState) {
+            // this performs claim for all available ids which caller is in
+        }
         fn get_tip(self: @ContractState, id: u256) -> TipDetails {
             Default::default()
         }
@@ -143,7 +178,7 @@ pub mod TipManager {
             node.status.write(TipStatus::Pending);
 
             let tip_created = TipCreated {
-                created_by: caller, recipient, created_at, deadline, target_amount, token,
+                id, created_by: caller, recipient, created_at, deadline, target_amount, token,
             };
             self.emit(tip_created);
 
@@ -158,10 +193,10 @@ pub mod TipManager {
 
             let Tip { recipient, target_amount, deadline, token } = tip;
             let mut resolved_to = array![]; // we assume it's the recipient
-            let mut resolved = false;
+            let mut resolved = node.status.read() != TipStatus::Pending;
             let mut amount = node.funds_raised.read();
             let dispatcher = IERC20Dispatcher { contract_address: node.tip.read().token };
-            if deadline <= get_block_timestamp() {
+            if deadline <= get_block_timestamp() && !resolved {
                 if amount == target_amount {
                     // initialize a transfer to the target
                     // for nice user experience, we only want to collect a fee when the tip is
@@ -229,6 +264,11 @@ pub mod TipManager {
             node.funds_raised_ref.write(previous + amount);
             let previous = node.funders.entry(from).read();
             node.funders.entry(from).write(previous + amount);
+
+            let tip_funded = TipFunded {
+                id: node.id.read(), funded_by: from, amount, token: tip.token,
+            };
+            self.emit(tip_funded);
         }
 
         fn validate_tip(
@@ -237,9 +277,8 @@ pub mod TipManager {
             let Tip { recipient, target_amount, deadline, token } = tip;
             assert!(target_amount >= self.min_target_amount.read(), "INVALID TARGET AMOUNT");
             let max = self.max_target_amount.read();
-            if max > 0 {
-                assert!(target_amount <= max, "Tip is > max tip amount of: {}", max);
-            }
+            // if max > 0 { assert!(target_amount <= max, "Tip is > max tip amount of: {}", max);}
+            assert!(max == 0 || target_amount <= max, "Tip is > max tip amount of: {}", max);
             assert!(recipient.is_non_zero(), "RECIPIENT IS ZERO");
             assert!(caller != recipient, "CALLER CANNOT BE RECIPIENT");
             assert!(deadline > timestamp, "INVALID DEADLINE");

@@ -31,7 +31,7 @@ pub trait ITipManager<TContractState> {
     fn update(ref self: TContractState, id: u256, update: TipUpdate);
     fn create_and_fund(ref self: TContractState, tip: Tip, initial_funding: u256) -> u256;
     /// Here, anybody can fund a particular tip, except the recipient.
-    fn fund(ref self: TContractState, id: u256);
+    fn fund(ref self: TContractState, id: u256, amount: u256);
     fn claim(ref self: TContractState, id: u256);
     fn claim_available(ref self: TContractState);
     fn get_tip(self: @TContractState, id: u256) -> TipDetails;
@@ -92,6 +92,7 @@ pub enum TipStatus {
 
 #[derive(Drop, starknet::Event)]
 pub struct TipCreated {
+    pub id: u256,
     pub created_by: ContractAddress,
     pub recipient: ContractAddress,
     pub created_at: u64,
@@ -115,10 +116,19 @@ pub struct TipResolved {
 // each tuple represents (previous_value, new_value) if applicable
 #[derive(Drop, starknet::Event)]
 pub struct TipUpdated {
+    pub id: u256,
     pub updated_by: ContractAddress,
     pub updated_at: u64,
     pub recipient: (ContractAddress, ContractAddress),
     pub target_amount: (u256, u256),
     pub deadline: (u64, u64),
-    pub token: (ContractAddress, ContractAddress)
+    pub token: (ContractAddress, ContractAddress),
+}
+
+#[derive(Drop, starknet::Event)]
+pub struct TipFunded {
+    pub id: u256,
+    pub funded_by: ContractAddress,
+    pub amount: u256,
+    pub token: ContractAddress,
 }
