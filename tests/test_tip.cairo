@@ -29,7 +29,7 @@ fn deploy_token() -> ContractAddress {
     let mut constructor_calldata: Array<felt252> = array![];
     let token_name: ByteArray = "Artisyn Token";
     let token_symbol: ByteArray = "ART";
-    let initial_supply: u256 = 100000000;
+    let initial_supply: u256 = 100_000_000;
 
     token_name.serialize(ref constructor_calldata);
     token_symbol.serialize(ref constructor_calldata);
@@ -40,13 +40,13 @@ fn deploy_token() -> ContractAddress {
     contract_address
 }
 
-fn deploy(token: ContractAddress) -> ITipManagerDispatcher {
+fn deploy(token: ContractAddress, max: u256) -> ITipManagerDispatcher {
     let contract = declare("TipManager").unwrap().contract_class();
     let mut constructor_calldata: Array<felt252> = array![];
     let fee_percentage: u64 = 800; // 8%
     let supported_tokens: Array<ContractAddress> = array![token];
     let min_target_amount: u256 = 1000;
-    let max_target_amount: u256 = 1000000;
+    let max_target_amount = max;
     let owner: ContractAddress = owner();
 
     (fee_percentage, supported_tokens, min_target_amount, max_target_amount, owner)
@@ -57,10 +57,10 @@ fn deploy(token: ContractAddress) -> ITipManagerDispatcher {
 
 fn setup() -> (ITipManagerDispatcher, IERC20Dispatcher) {
     let token = deploy_token();
-    let tip_dispatcher = deploy(token);
+    let max_target_amount: u256 = 1_000_000;
+    let tip_dispatcher = deploy(token, max_target_amount);
     cheat_caller_address(token, owner(), CheatSpan::TargetCalls(5));
     let token = IERC20Dispatcher { contract_address: token };
-    let balance = token.balance_of(owner());
     token.transfer(creator(), 1000000);
     token.transfer(recipient(), 1000000);
     cheat_caller_address(token.contract_address, creator(), CheatSpan::TargetCalls(1));
@@ -106,9 +106,38 @@ fn test_tip_creation_success() {
 }
 
 #[test]
-#[should_panic(expected: "Something")]
+#[should_panic(expected: "INVALID TARGET AMOUNT")]
 fn test_tip_creation_should_panic_on_invalid_details() {
-    panic!("Something");
+    let (dispatcher, _) = setup();
+    cheat_caller_address(dispatcher.contract_address, creator(), CheatSpan::TargetCalls(1));
+    let mut tip = default_tip(1223.try_into().unwrap());
+    // reduce the min target amount
+    tip.target_amount = 900;
+    dispatcher.create(tip);
+}
+
+#[test]
+#[should_panic(expected: "Tip is > max tip amount of: 1000000")]
+fn test_tip_creation_should_panic_on_target_greater_than_threshold() {
+    let (dispatcher, _) = setup();
+    cheat_caller_address(dispatcher.contract_address, creator(), CheatSpan::TargetCalls(1));
+    let mut tip = default_tip(1223.try_into().unwrap());
+    // increase the target amount
+    tip.target_amount = 2000000;
+    dispatcher.create(tip);
+}
+
+#[test]
+fn test_tip_creation_success_on_target_on_zero_target_threshold() {
+    // deploy the contract using 0 as threshold.
+    let token = deploy_token();
+    let dispatcher = deploy(token, 0);
+    cheat_caller_address(dispatcher.contract_address, creator(), CheatSpan::TargetCalls(1));
+    let mut tip = default_tip(token);
+    tip.target_amount = 2_000_000; // greater than the 1m threshold earlier.
+    let id = dispatcher.create(tip);
+
+    assert(id > 0, 'CREATION FAILED');
 }
 
 #[test]
