@@ -32,10 +32,10 @@ mod tests {
         token_name.serialize(ref constructor_calldata);
         token_symbol.serialize(ref constructor_calldata);
         INITIAL_SUPPLY.serialize(ref constructor_calldata);
+        let owner: ContractAddress = OWNER.try_into().unwrap();
+        owner.serialize(ref constructor_calldata);
 
-        start_cheat_caller_address(get_contract_address(), OWNER.try_into().unwrap());
         let (contract_address, _) = contract.deploy(@constructor_calldata).unwrap();
-        stop_cheat_caller_address(get_contract_address());
 
         contract_address
     }

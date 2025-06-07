@@ -160,12 +160,14 @@ pub mod ArtisynToken {
 
     #[constructor]
     fn constructor(
-        ref self: ContractState, name: ByteArray, symbol: ByteArray, total_supply: u256,
+        ref self: ContractState,
+        name: ByteArray,
+        symbol: ByteArray,
+        total_supply: u256,
+        owner: ContractAddress,
     ) {
-        let caller = get_caller_address();
-
         // Initialize components
-        self.ownable.initializer(caller);
+        self.ownable.initializer(owner);
         self.erc20.initializer(name, symbol);
         self
             .src5
@@ -177,11 +179,11 @@ pub mod ArtisynToken {
         self.paused.write(false);
 
         // Set deployer as initial minter and burner
-        self.minters.entry(caller).write(true);
-        self.burners.entry(caller).write(true);
+        self.minters.entry(owner).write(true);
+        self.burners.entry(owner).write(true);
 
         // Mint total supply to the deployer
-        self.erc20.mint(caller, total_supply);
+        self.erc20.mint(owner, total_supply);
     }
 
     #[abi(embed_v0)]

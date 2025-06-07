@@ -71,7 +71,6 @@ pub mod TipManager {
             if self.update_state(node) {
                 return;
             }
-            // implement an update here. Rebuild the tip, if any.
             // move all old values for a possible event if entry values are validated successfully
             let mut tip = node.tip.read();
             let mut old_recipient = tip.recipient;
@@ -131,7 +130,7 @@ pub mod TipManager {
             assert!(caller != tip.recipient, "CALLER CANNOT BE RECIPIENT");
             let dispatcher = IERC20Dispatcher { contract_address: tip.token };
             assert!(dispatcher.balance_of(caller) >= amount, "INSUFFICIENT BALANCE");
-            self.fund_tip(node, amount, tip, dispatcher, caller);
+            self.fund_tip(id, node, amount, tip, dispatcher, caller);
         }
 
         fn claim(ref self: ContractState, id: u256) {
@@ -208,7 +207,7 @@ pub mod TipManager {
 
             // any failure in the transaction reverts, thus, the tip will not proceed to be created
             if amount > 0 {
-                self.fund_tip(node, amount, tip, dispatcher, caller);
+                self.fund_tip(id, node, amount, tip, dispatcher, caller);
             }
             node.id.write(id);
             node.creator.write(caller);
@@ -222,7 +221,6 @@ pub mod TipManager {
                 id, created_by: caller, recipient, created_at, deadline, target_amount, token,
             };
             self.emit(tip_created);
-
             self.tip_count.write(id);
             id
         }
@@ -288,6 +286,7 @@ pub mod TipManager {
 
         fn fund_tip(
             ref self: ContractState,
+            id: u256,
             node: StoragePath<Mutable<TipNode>>,
             mut amount: u256,
             tip: Tip,
@@ -307,9 +306,7 @@ pub mod TipManager {
 
             let funded_at = get_block_timestamp();
 
-            let tip_funded = TipFunded {
-                id: node.id.read(), funded_by: from, amount, token: tip.token, funded_at,
-            };
+            let tip_funded = TipFunded { id, funded_by: from, amount, token: tip.token, funded_at };
             self.emit(tip_funded);
         }
 
