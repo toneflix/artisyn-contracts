@@ -68,9 +68,7 @@ pub mod TipManager {
             let caller = get_caller_address();
             assert!(caller == node.creator.read(), "UNAUTHORIZED CALLER");
             assert!(node.status.read() == TipStatus::Pending, "INVALID TIP");
-            if self.update_state(node) {
-                return;
-            }
+            assert!(!self.update_state(node), "TIP CANNOT BE UPDATED");
             // move all old values for a possible event if entry values are validated successfully
             let mut tip = node.tip.read();
             let mut old_recipient = tip.recipient;
@@ -122,9 +120,7 @@ pub mod TipManager {
             assert!(caller.is_non_zero(), "ZERO CALLER");
             let node = self.tips.entry(id);
             assert!(node.status.read() == TipStatus::Pending, "INVALID TIP WITH ID");
-            if self.update_state(node) {
-                return;
-            }
+            assert!(!self.update_state(node), "TIP IS NOT FUNDABLE");
 
             let tip = node.tip.read();
             assert!(caller != tip.recipient, "CALLER CANNOT BE RECIPIENT");
@@ -226,7 +222,6 @@ pub mod TipManager {
         }
 
         fn update_state(ref self: ContractState, node: StoragePath<Mutable<TipNode>>) -> bool {
-            let caller = get_caller_address();
             let tip = node.tip.read();
             let mut status = 'CLAIMED';
 
@@ -255,13 +250,13 @@ pub mod TipManager {
 
                     while let Option::Some(funder) = funders.pop() {
                         let funds = node.funders.entry(funder).read();
-                        dispatcher.transfer(funder, amount);
+                        dispatcher.transfer(funder, funds);
                         node.funders.entry(funder).write(0);
                         node.funds_raised.write(node.funds_raised.read() - funds);
                         resolved_to.append(funder);
                     }
                     node.status.write(TipStatus::Void);
-                    status = 'VOID';
+                    status = 'VOIDED';
                 }
                 resolved = true;
             }
@@ -271,7 +266,7 @@ pub mod TipManager {
                 let resolved_at = get_block_timestamp();
                 let tip_resolved = TipResolved {
                     id: node.id.read(),
-                    created_by: caller,
+                    created_by: node.creator.read(),
                     proposed_recipient,
                     resolved_at,
                     resolved_to,
@@ -303,6 +298,7 @@ pub mod TipManager {
             node.funds_raised_ref.write(previous + amount);
             let previous = node.funders.entry(from).read();
             node.funders.entry(from).write(previous + amount);
+            node.funders_vec.push(from);
 
             let funded_at = get_block_timestamp();
 
