@@ -21,14 +21,14 @@ pub trait IArtisynToken<TContractState> {
 
 #[starknet::contract]
 pub mod ArtisynToken {
-    use starknet::{ClassHash, get_caller_address, ContractAddress};
-    use core::starknet::storage::{
-        StoragePointerReadAccess, StoragePointerWriteAccess, Map, StoragePathEntry,
+    use openzeppelin::access::ownable::OwnableComponent;
+    use openzeppelin::introspection::src5::SRC5Component;
+    use openzeppelin::token::erc20::{ERC20Component, ERC20HooksEmptyImpl};
+    use openzeppelin::upgrades::UpgradeableComponent;
+    use starknet::storage::{
+        Map, StoragePathEntry, StoragePointerReadAccess, StoragePointerWriteAccess,
     };
-    use openzeppelin::{
-        access::ownable::OwnableComponent, token::erc20::{ERC20Component, ERC20HooksEmptyImpl},
-        introspection::src5::SRC5Component, upgrades::UpgradeableComponent,
-    };
+    use starknet::{ClassHash, ContractAddress, get_caller_address};
 
     component!(path: OwnableComponent, storage: ownable, event: OwnableEvent);
     component!(path: ERC20Component, storage: erc20, event: ERC20Event);
@@ -160,12 +160,14 @@ pub mod ArtisynToken {
 
     #[constructor]
     fn constructor(
-        ref self: ContractState, name: ByteArray, symbol: ByteArray, total_supply: u256,
+        ref self: ContractState,
+        name: ByteArray,
+        symbol: ByteArray,
+        total_supply: u256,
+        owner: ContractAddress,
     ) {
-        let caller = get_caller_address();
-
         // Initialize components
-        self.ownable.initializer(caller);
+        self.ownable.initializer(owner);
         self.erc20.initializer(name, symbol);
         self
             .src5
@@ -177,11 +179,11 @@ pub mod ArtisynToken {
         self.paused.write(false);
 
         // Set deployer as initial minter and burner
-        self.minters.entry(caller).write(true);
-        self.burners.entry(caller).write(true);
+        self.minters.entry(owner).write(true);
+        self.burners.entry(owner).write(true);
 
         // Mint total supply to the deployer
-        self.erc20.mint(caller, total_supply);
+        self.erc20.mint(owner, total_supply);
     }
 
     #[abi(embed_v0)]
